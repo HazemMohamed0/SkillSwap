@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:skill_swap/app_theme.dart'; // Import your app theme
-import 'package:image_picker/image_picker.dart'; // For image picking
+import 'package:skill_swap/app_theme.dart';
+import 'package:image_picker/image_picker.dart';
 import 'dart:io';
-import 'dart:async'; // For Future operations
+import 'dart:async';
+import 'dart:convert'; // For JSON parsing
+import 'package:flutter/services.dart'; // For loading assets
 
 class ProfileSetupPage extends StatefulWidget {
   static const String routeName = '/profile-setup';
@@ -17,7 +19,12 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
   // Selected skills
   final List<String> _selectedOfferedSkills = [];
   final List<String> _selectedDesiredSkills = [];
+
+  // All skill options
   List<String> _skillOptions = [];
+
+  // Skill categories from JSON
+  List<Map<String, dynamic>> _skillCategories = [];
 
   // For skills search filtering
   List<String> _filteredOfferedSkills = [];
@@ -39,7 +46,7 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
   @override
   void initState() {
     super.initState();
-    fetchSkills();
+    loadSkillsData();
   }
 
   @override
@@ -49,131 +56,54 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
     super.dispose();
   }
 
-  // Helper to capitalize for better display
-  String _capitalize(String text) {
-    if (text.isEmpty) return text;
-    return text[0].toUpperCase() + text.substring(1);
-  }
-
-  // Load skills from local data
-  Future<void> fetchSkills() async {
+  // Load skills from JSON file
+  Future<void> loadSkillsData() async {
     setState(() {
       _isLoading = true;
       _errorMessage = '';
     });
 
-    // Simulate network delay for better UX testing
-    await Future.delayed(const Duration(milliseconds: 800));
-
     try {
-      // We're using a comprehensive local list instead of an API
-      // In a real app, you could load this from a JSON file in your assets
+      // Load the JSON file from assets
+      // Note: Make sure to add the file to your pubspec.yaml under assets
+      final String jsonString = await rootBundle.loadString(
+        'assets/data/skills_data.json',
+      );
+      final Map<String, dynamic> jsonData = json.decode(jsonString);
+
+      // Extract categories
+      final List<dynamic> categoriesJson = jsonData['categories'];
+
+      // Convert to proper Map format
+      _skillCategories =
+          categoriesJson.map<Map<String, dynamic>>((category) {
+            return {
+              'name': category['name'],
+              'skills': List<String>.from(category['skills']),
+            };
+          }).toList();
+
+      // Create a flattened list of all skills for the main options
+      final List<String> allSkills = [];
+      for (var category in _skillCategories) {
+        allSkills.addAll(List<String>.from(category['skills']));
+      }
+
+      // Sort alphabetically
+      allSkills.sort();
+
       setState(() {
-        _skillOptions = [
-          // Tech & Development
-          "Android Development",
-          "Backend Development",
-          "Blockchain Development",
-          "Cloud Computing",
-          "Cybersecurity",
-          "Data Analytics",
-          "Data Engineering",
-          "Data Science",
-          "DevOps",
-          "Frontend Development",
-          "Full Stack Development",
-          "Game Development",
-          "iOS Development",
-          "Machine Learning",
-          "Mobile App Development",
-          "Python Programming",
-          "React Native Development",
-          "Software Architecture",
-          "Software Engineering",
-          "Web Development",
-          "WordPress Development",
-
-          // Design
-          "3D Design",
-          "Animation",
-          "Brand Design",
-          "Graphic Design",
-          "Illustration",
-          "Motion Graphics",
-          "Photography",
-          "Product Design",
-          "UI/UX Design",
-          "User Research",
-          "Video Editing",
-
-          // Business & Marketing
-          "Content Marketing",
-          "Digital Marketing",
-          "E-commerce",
-          "Email Marketing",
-          "Event Planning",
-          "Financial Planning",
-          "Growth Hacking",
-          "Market Research",
-          "Project Management",
-          "Public Relations",
-          "Sales Strategy",
-          "SEO",
-          "Social Media Marketing",
-          "Social Media Management",
-          "Supply Chain Management",
-
-          // Content Creation
-          "Academic Writing",
-          "Blog Writing",
-          "Content Creation",
-          "Content Writing",
-          "Copywriting",
-          "Creative Writing",
-          "Editing",
-          "Ghostwriting",
-          "Journalism",
-          "Podcasting",
-          "Scriptwriting",
-          "Technical Writing",
-          "Translation",
-          "Video Production",
-
-          // Arts & Music
-          "Acting",
-          "Dance",
-          "Drawing",
-          "Filmmaking",
-          "Music Composition",
-          "Music Production",
-          "Painting",
-          "Photography",
-          "Singing",
-          "Songwriting",
-
-          // Other Skills
-          "Cooking",
-          "Gardening",
-          "Interior Design",
-          "Language Teaching",
-          "Meditation",
-          "Negotiation",
-          "Personal Fitness",
-          "Public Speaking",
-          "Teaching",
-          "Yoga",
-        ]..sort(); // Sort alphabetically
-
-        _filteredOfferedSkills = List.from(_skillOptions);
-        _filteredDesiredSkills = List.from(_skillOptions);
+        _skillOptions = allSkills;
+        _filteredOfferedSkills = List.from(allSkills);
+        _filteredDesiredSkills = List.from(allSkills);
         _isLoading = false;
       });
     } catch (e) {
       setState(() {
-        _errorMessage = 'Error loading skills data.';
+        _errorMessage = 'Error loading skills data: $e';
         _isLoading = false;
 
-        // Absolute fallback if even local data fails
+        // Fallback if loading fails
         _skillOptions = [
           "Programming",
           "Product Design",
@@ -224,100 +154,21 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
   }
 
   // Filter skills by category (when user taps a category chip)
-  void filterByCategory(String category) {
-    // Define which skills belong to which category
-    Map<String, List<String>> categoryFilters = {
-      'Tech & Development': [
-        "Android Development",
-        "Backend Development",
-        "Blockchain Development",
-        "Cloud Computing",
-        "Cybersecurity",
-        "Data Analytics",
-        "Data Engineering",
-        "Data Science",
-        "DevOps",
-        "Frontend Development",
-        "Full Stack Development",
-        "Game Development",
-        "iOS Development",
-        "Machine Learning",
-        "Mobile App Development",
-        "Python Programming",
-        "React Native Development",
-        "Software Architecture",
-        "Software Engineering",
-        "Web Development",
-        "WordPress Development",
-      ],
-      'Design': [
-        "3D Design",
-        "Animation",
-        "Brand Design",
-        "Graphic Design",
-        "Illustration",
-        "Motion Graphics",
-        "Photography",
-        "Product Design",
-        "UI/UX Design",
-        "User Research",
-        "Video Editing",
-      ],
-      'Business': [
-        "Content Marketing",
-        "Digital Marketing",
-        "E-commerce",
-        "Email Marketing",
-        "Event Planning",
-        "Financial Planning",
-        "Growth Hacking",
-        "Market Research",
-        "Project Management",
-        "Public Relations",
-        "Sales Strategy",
-        "SEO",
-        "Social Media Marketing",
-        "Social Media Management",
-        "Supply Chain Management",
-      ],
-      'Content Creation': [
-        "Academic Writing",
-        "Blog Writing",
-        "Content Creation",
-        "Content Writing",
-        "Copywriting",
-        "Creative Writing",
-        "Editing",
-        "Ghostwriting",
-        "Journalism",
-        "Podcasting",
-        "Scriptwriting",
-        "Technical Writing",
-        "Translation",
-        "Video Production",
-      ],
-      'Arts & Music': [
-        "Acting",
-        "Dance",
-        "Drawing",
-        "Filmmaking",
-        "Music Composition",
-        "Music Production",
-        "Painting",
-        "Photography",
-        "Singing",
-        "Songwriting",
-      ],
-    };
+  void filterByCategory(String categoryName) {
+    // Find the selected category in our loaded data
+    final category = _skillCategories.firstWhere(
+      (category) => category['name'] == categoryName,
+      orElse: () => {'name': '', 'skills': []},
+    );
 
-    // Apply the filter to both sections
+    // Clear search fields
     setState(() {
       _offeredSkillsController.clear();
       _desiredSkillsController.clear();
 
-      if (categoryFilters.containsKey(category)) {
-        _filteredOfferedSkills = categoryFilters[category]!;
-        _filteredDesiredSkills = categoryFilters[category]!;
+      if (category['skills'].isNotEmpty) {
+        _filteredOfferedSkills = List<String>.from(category['skills']);
+        _filteredDesiredSkills = List<String>.from(category['skills']);
       } else {
         _filteredOfferedSkills = List.from(_skillOptions);
         _filteredDesiredSkills = List.from(_skillOptions);
@@ -327,7 +178,7 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
     // Show a message to the user about the filter
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Showing $category skills'),
+        content: Text('Showing $categoryName skills'),
         duration: const Duration(seconds: 2),
         action: SnackBarAction(
           label: 'Clear Filter',
@@ -939,7 +790,7 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
                           ),
                         ),
 
-                      // Skill categories chips (Optional)
+                      // Skill categories chips
                       Container(
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         child: Column(
@@ -953,19 +804,15 @@ class _ProfileSetupPageState extends State<ProfileSetupPage> {
                             SingleChildScrollView(
                               scrollDirection: Axis.horizontal,
                               child: Row(
-                                children: [
-                                  _buildCategoryChip(
-                                    'Tech & Development',
-                                    context,
-                                  ),
-                                  _buildCategoryChip('Design', context),
-                                  _buildCategoryChip('Business', context),
-                                  _buildCategoryChip(
-                                    'Content Creation',
-                                    context,
-                                  ),
-                                  _buildCategoryChip('Arts & Music', context),
-                                ],
+                                children:
+                                    _skillCategories
+                                        .map(
+                                          (category) => _buildCategoryChip(
+                                            category['name'],
+                                            context,
+                                          ),
+                                        )
+                                        .toList(),
                               ),
                             ),
                           ],
